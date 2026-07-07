@@ -2,7 +2,19 @@ import { Link } from "@tanstack/react-router";
 import { signOut } from "firebase/auth";
 import { auth } from "@/integrations/firebase/client";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
+import { LineChart, LogOut, Wallet } from "lucide-react";
+
+function NavLink({ to, icon: Icon, label }: { to: string; icon: typeof Wallet; label: string }) {
+  return (
+    <Link
+      to={to}
+      className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-muted-foreground transition hover:text-foreground"
+      activeProps={{ className: "bg-primary/10 !text-primary" }}
+    >
+      <Icon className="h-4 w-4" /> {label}
+    </Link>
+  );
+}
 
 export function AppHeader({ email }: { email?: string | null }) {
   const handleSignOut = async () => {
@@ -25,6 +37,10 @@ export function AppHeader({ email }: { email?: string | null }) {
             </span>
           </div>
         </Link>
+        <nav className="flex items-center gap-1">
+          <NavLink to="/dashboard" icon={Wallet} label="Accounts" />
+          <NavLink to="/investments" icon={LineChart} label="Investments" />
+        </nav>
         <div className="flex items-center gap-3">
           {email && <span className="hidden text-sm text-muted-foreground sm:block">{email}</span>}
           <Button variant="secondary" size="sm" onClick={handleSignOut}>

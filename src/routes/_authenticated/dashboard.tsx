@@ -5,16 +5,45 @@ import { AppHeader } from "@/components/AppHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { CreditCard, PiggyBank, Wallet, TrendingUp, Banknote, MoreHorizontal, Plus, Trash2, ArrowRight, Sparkles, Loader2 } from "lucide-react";
+import {
+  CreditCard,
+  PiggyBank,
+  Wallet,
+  TrendingUp,
+  Banknote,
+  MoreHorizontal,
+  Plus,
+  Trash2,
+  ArrowRight,
+  Sparkles,
+  Loader2,
+} from "lucide-react";
 import { z } from "zod";
 
-import { formatMoney } from "@/lib/format";
-import type { AccountType } from "@/lib/api-types";
+import { format } from "date-fns";
+
+import { formatBalance, formatMoney, toSignedBalance } from "@/lib/format";
+import type { AccountType, NetPosition } from "@/lib/api-types";
 import { useAccounts, useCreateAccount, useDeleteAccount } from "@/hooks/api/accounts";
 import { useAnalysis, useAnalysisJob, useAnalyzeAll } from "@/hooks/api/analysis";
+import { useCountUp } from "@/hooks/useCountUp";
+import { BalanceInputs } from "@/components/BalanceInputs";
 import { StatCards } from "@/components/analysis/StatCards";
 import { CategoryBreakdown } from "@/components/analysis/CategoryBreakdown";
 import { MonthlyCashflow } from "@/components/analysis/MonthlyCashflow";
@@ -42,6 +71,15 @@ function Dashboard() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<AccountType>("checking");
+  const [balanceInput, setBalanceInput] = useState("");
+  const [balanceAsOf, setBalanceAsOf] = useState<Date | undefined>(new Date());
+
+  const resetCreateForm = () => {
+    setName("");
+    setType("checking");
+    setBalanceInput("");
+    setBalanceAsOf(new Date());
+  };
 
   const submitCreate = () => {
     try {
@@ -51,12 +89,21 @@ function Dashboard() {
           type: z.enum(["checking", "savings", "credit_card", "investment", "loan", "other"]),
         })
         .parse({ name, type });
-      createAccount.mutate(parsed, {
+      const body: Parameters<typeof createAccount.mutate>[0] = parsed;
+      if (balanceInput.trim() !== "") {
+        const amount = parseFloat(balanceInput);
+        if (!Number.isFinite(amount)) {
+          toast.error("Balance must be a number");
+          return;
+        }
+        body.current_balance = toSignedBalance(parsed.type, amount);
+        body.balance_as_of = format(balanceAsOf ?? new Date(), "yyyy-MM-dd");
+      }
+      createAccount.mutate(body, {
         onSuccess: () => {
           toast.success("Account created");
           setOpen(false);
-          setName("");
-          setType("checking");
+          resetCreateForm();
         },
         onError: (e) => toast.error((e as Error).message),
       });
@@ -90,29 +137,58 @@ function Dashboard() {
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" /> New account</Button>
+              <Button>
+                <Plus className="mr-2 h-4 w-4" /> New account
+              </Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>Create an account</DialogTitle></DialogHeader>
+              <DialogHeader>
+                <DialogTitle>Create an account</DialogTitle>
+              </DialogHeader>
               <div className="space-y-4">
                 <div>
                   <Label htmlFor="acct-name">Account name</Label>
-                  <Input id="acct-name" placeholder="e.g. Main Checking" value={name} onChange={(e) => setName(e.target.value)} className="mt-1" />
+                  <Input
+                    id="acct-name"
+                    placeholder="e.g. Main Checking"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="mt-1"
+                  />
                 </div>
                 <div>
                   <Label>Type</Label>
                   <Select value={type} onValueChange={(v) => setType(v as AccountType)}>
-                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       {ACCOUNT_TYPES.map((t) => (
-                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                        <SelectItem key={t.value} value={t.value}>
+                          {t.label}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <BalanceInputs
+                    type={type}
+                    value={balanceInput}
+                    onValueChange={setBalanceInput}
+                    asOf={balanceAsOf}
+                    onAsOfChange={setBalanceAsOf}
+                    idPrefix="create-acct"
+                  />
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Optional — lets FinWise back-calculate your balance history from imported CSVs.
+                  </p>
+                </div>
               </div>
               <DialogFooter>
-                <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
+                <Button variant="secondary" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
                 <Button onClick={submitCreate} disabled={createAccount.isPending}>
                   {createAccount.isPending ? "Creating…" : "Create"}
                 </Button>
@@ -124,17 +200,27 @@ function Dashboard() {
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           <SummaryTile label="Total accounts" value={String(list.length)} />
           <SummaryTile label="Total transactions" value={String(totalTx)} />
-          <SummaryTile label="Net balance" value={formatMoney(totalNet)} accent={totalNet >= 0 ? "success" : "destructive"} />
+          <SummaryTile
+            label="Net balance"
+            value={formatMoney(totalNet)}
+            accent={totalNet >= 0 ? "success" : "destructive"}
+          />
         </div>
 
         <div className="mt-10">
           {isLoading ? (
-            <div className="glass-card grid place-items-center rounded-2xl p-16 text-sm text-muted-foreground">Loading…</div>
+            <div className="glass-card grid place-items-center rounded-2xl p-16 text-sm text-muted-foreground">
+              Loading…
+            </div>
           ) : list.length === 0 ? (
             <div className="glass-card grid place-items-center rounded-2xl p-16 text-center">
               <h3 className="text-lg font-semibold">No accounts yet</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Create your first account to get started.</p>
-              <Button className="mt-4" onClick={() => setOpen(true)}><Plus className="mr-2 h-4 w-4" /> New account</Button>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Create your first account to get started.
+              </p>
+              <Button className="mt-4" onClick={() => setOpen(true)}>
+                <Plus className="mr-2 h-4 w-4" /> New account
+              </Button>
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -142,7 +228,10 @@ function Dashboard() {
                 const meta = ACCOUNT_TYPES.find((t) => t.value === a.type) ?? ACCOUNT_TYPES[5];
                 const Icon = meta.icon;
                 return (
-                  <div key={a.id} className="glass-card group relative rounded-2xl p-6 transition hover:border-primary/40">
+                  <div
+                    key={a.id}
+                    className="glass-card group relative rounded-2xl p-6 transition hover:border-primary/40"
+                  >
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-primary">
@@ -162,12 +251,29 @@ function Dashboard() {
                       </button>
                     </div>
                     <div className="mt-6 flex items-end justify-between">
-                      <div>
-                        <p className="text-xs uppercase tracking-wider text-muted-foreground">Net flow</p>
-                        <p className={`num-mono text-2xl font-semibold ${a.net_sum >= 0 ? "text-success" : "text-destructive"}`}>
-                          {formatMoney(a.net_sum)}
-                        </p>
-                      </div>
+                      {a.current_balance != null ? (
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                            Balance{a.balance_as_of ? ` · ${a.balance_as_of}` : ""}
+                          </p>
+                          <p
+                            className={`num-mono text-2xl font-semibold ${a.current_balance >= 0 ? "text-success" : "text-destructive"}`}
+                          >
+                            {formatBalance(a.type, a.current_balance)}
+                          </p>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                            Net of imported transactions
+                          </p>
+                          <p
+                            className={`num-mono text-2xl font-semibold ${a.net_sum >= 0 ? "text-success" : "text-destructive"}`}
+                          >
+                            {formatMoney(a.net_sum)}
+                          </p>
+                        </div>
+                      )}
                       <p className="text-xs text-muted-foreground">{a.tx_count} tx</p>
                     </div>
                     <Link
@@ -226,18 +332,27 @@ function OverallAnalysis() {
           <h2 className="text-xl font-semibold">Overall analysis</h2>
         </div>
         <Button variant="secondary" size="sm" onClick={run} disabled={running}>
-          {running ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing…</> : "Re-run analysis"}
+          {running ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing…
+            </>
+          ) : (
+            "Re-run analysis"
+          )}
         </Button>
       </div>
 
       {running && (
         <p className="mb-4 text-sm text-muted-foreground">
-          Analyzing… {job ? `${job.status} · ${job.progress}%` : "queued"} — categorizing merchants and writing insights.
+          Analyzing… {job ? `${job.status} · ${job.progress}%` : "queued"} — categorizing merchants
+          and writing insights.
         </p>
       )}
 
       {isLoading ? (
-        <div className="glass-card grid place-items-center rounded-2xl p-12 text-sm text-muted-foreground">Loading…</div>
+        <div className="glass-card grid place-items-center rounded-2xl p-12 text-sm text-muted-foreground">
+          Loading…
+        </div>
       ) : !overall ? (
         <div className="glass-card grid place-items-center rounded-2xl p-12 text-center">
           <h3 className="text-lg font-semibold">No overall analysis yet</h3>
@@ -250,6 +365,7 @@ function OverallAnalysis() {
         </div>
       ) : (
         <div className="space-y-6">
+          {overall.net_position && <NetPositionRow netPosition={overall.net_position} />}
           <StatCards totals={overall.totals} fees={overall.fees} />
           <div className="grid gap-6 lg:grid-cols-2">
             <CategoryBreakdown categories={overall.categories} />
@@ -262,11 +378,77 @@ function OverallAnalysis() {
   );
 }
 
-function SummaryTile({ label, value, accent }: { label: string; value: string; accent?: "success" | "destructive" }) {
+function NetPositionTile({
+  label,
+  target,
+  accent,
+}: {
+  label: string;
+  target: number;
+  accent: "success" | "destructive" | "auto";
+}) {
+  const value = useCountUp(target);
+  const colorClass =
+    accent === "auto"
+      ? target >= 0
+        ? "text-success"
+        : "text-destructive"
+      : accent === "success"
+        ? "text-success"
+        : "text-destructive";
+  return (
+    <div className="glass-card rounded-2xl p-5">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={`num-mono mt-2 text-2xl font-semibold sm:text-3xl ${colorClass}`}>
+        {formatMoney(value)}
+      </p>
+    </div>
+  );
+}
+
+// NetPositionRow shows assets / debts / net from the all-scope analysis result
+// — computed only from accounts with a balance set; the rest are listed so the
+// user knows what's missing.
+function NetPositionRow({ netPosition }: { netPosition: NetPosition }) {
+  return (
+    <div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <NetPositionTile label="Total assets" target={netPosition.total_assets} accent="success" />
+        <NetPositionTile
+          label="Total debts"
+          target={netPosition.total_debts}
+          accent="destructive"
+        />
+        <NetPositionTile label="Net position" target={netPosition.net} accent="auto" />
+      </div>
+      {netPosition.accounts_missing_balance.length > 0 && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          No balance set for {netPosition.accounts_missing_balance.join(", ")} — set one on the
+          account page to include{" "}
+          {netPosition.accounts_missing_balance.length === 1 ? "it" : "them"} here.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function SummaryTile({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: "success" | "destructive";
+}) {
   return (
     <div className="glass-card rounded-2xl p-5">
       <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className={`num-mono mt-2 text-2xl font-semibold ${accent === "success" ? "text-success" : accent === "destructive" ? "text-destructive" : ""}`}>{value}</p>
+      <p
+        className={`num-mono mt-2 text-2xl font-semibold ${accent === "success" ? "text-success" : accent === "destructive" ? "text-destructive" : ""}`}
+      >
+        {value}
+      </p>
     </div>
   );
 }

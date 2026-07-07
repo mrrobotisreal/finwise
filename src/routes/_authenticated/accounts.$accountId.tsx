@@ -7,21 +7,54 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import {
-  ArrowLeft, ArrowUpDown, ArrowUp, ArrowDown, Upload, Trash2, Search, Filter, X, BarChart3, Calendar as CalendarIcon, Sparkles, Loader2,
+  ArrowLeft,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Upload,
+  Trash2,
+  Search,
+  Filter,
+  X,
+  BarChart3,
+  Calendar as CalendarIcon,
+  Sparkles,
+  Loader2,
+  Pencil,
+  Lightbulb,
+  Wallet,
 } from "lucide-react";
 import Fuse from "fuse.js";
 import {
-  ColumnDef, flexRender, getCoreRowModel, getFilteredRowModel, getSortedRowModel, SortingState, useReactTable, RowSelectionState,
+  ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getSortedRowModel,
+  SortingState,
+  useReactTable,
+  RowSelectionState,
 } from "@tanstack/react-table";
 
-import { formatMoney } from "@/lib/format";
-import type { Transaction } from "@/lib/api-types";
+import { formatBalance, formatMoney } from "@/lib/format";
+import type { AccountSummary, Transaction } from "@/lib/api-types";
 import { useAccount } from "@/hooks/api/accounts";
-import { useDeleteTransactions, useSetTransactionCategory, useTransactions } from "@/hooks/api/transactions";
+import { BalanceEditPopover } from "@/components/BalanceEditPopover";
+import { BalanceTimeline } from "@/components/analysis/BalanceTimeline";
+import {
+  useDeleteTransactions,
+  useSetTransactionCategory,
+  useTransactions,
+} from "@/hooks/api/transactions";
 import { useUploadCsv } from "@/hooks/api/uploads";
 import { useCategories } from "@/hooks/api/categories";
 import { useAnalysis, useAnalysisJob, useAnalyzeAccount } from "@/hooks/api/analysis";
@@ -55,6 +88,9 @@ function AccountDetail() {
   const setCategory = useSetTransactionCategory(accountId);
   const analyzeAccount = useAnalyzeAccount();
 
+  // Shown when the user opens the upload flow on an account with no balance.
+  const [showBalanceNudge, setShowBalanceNudge] = useState(false);
+
   // Shared job polling for both uploads and manual re-runs.
   const [jobId, setJobId] = useState<string | undefined>();
   const { data: job } = useAnalysisJob(jobId);
@@ -77,17 +113,33 @@ function AccountDetail() {
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [globalFilter, setGlobalFilter] = useState("");
   const [colFilters, setColFilters] = useState<{
-    name: string; memo: string; type: string;
-    minAmount: string; maxAmount: string;
-    from: string; to: string;
-    onlyDebits: boolean; onlyCredits: boolean;
-  }>({ name: "", memo: "", type: "", minAmount: "", maxAmount: "", from: "", to: "", onlyDebits: false, onlyCredits: false });
+    name: string;
+    memo: string;
+    type: string;
+    minAmount: string;
+    maxAmount: string;
+    from: string;
+    to: string;
+    onlyDebits: boolean;
+    onlyCredits: boolean;
+  }>({
+    name: "",
+    memo: "",
+    type: "",
+    minAmount: "",
+    maxAmount: "",
+    from: "",
+    to: "",
+    onlyDebits: false,
+    onlyCredits: false,
+  });
 
   const allTx = txQuery.data ?? [];
   const categories = categoriesQuery.data ?? [];
 
   const fuse = useMemo(
-    () => new Fuse(allTx, { keys: ["name", "memo", "tx_type"], threshold: 0.35, ignoreLocation: true }),
+    () =>
+      new Fuse(allTx, { keys: ["name", "memo", "tx_type"], threshold: 0.35, ignoreLocation: true }),
     [allTx],
   );
 
@@ -96,7 +148,8 @@ function AccountDetail() {
     if (globalFilter.trim().length > 0) {
       out = fuse.search(globalFilter.trim()).map((r) => r.item);
     }
-    const { name, memo, type, minAmount, maxAmount, from, to, onlyDebits, onlyCredits } = colFilters;
+    const { name, memo, type, minAmount, maxAmount, from, to, onlyDebits, onlyCredits } =
+      colFilters;
     return out.filter((t) => {
       if (name && !(t.name ?? "").toLowerCase().includes(name.toLowerCase())) return false;
       if (memo && !(t.memo ?? "").toLowerCase().includes(memo.toLowerCase())) return false;
@@ -122,60 +175,106 @@ function AccountDetail() {
     );
   };
 
-  const columns = useMemo<ColumnDef<Tx>[]>(() => [
-    {
-      id: "select",
-      header: ({ table }) => (
-        <Checkbox
-          checked={table.getIsAllRowsSelected() ? true : table.getIsSomeRowsSelected() ? "indeterminate" : false}
-          onCheckedChange={(v) => table.toggleAllRowsSelected(!!v)}
-          aria-label="Select all"
-        />
-      ),
-      cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(v) => row.toggleSelected(!!v)}
-          aria-label="Select row"
-        />
-      ),
-      enableSorting: false,
-      size: 40,
-    },
-    { accessorKey: "tx_date", header: "Date", cell: ({ getValue }) => <span className="num-mono text-sm">{(getValue<string | null>() ?? "—")}</span> },
-    { accessorKey: "tx_type", header: "Type", cell: ({ getValue }) => {
-      const v = getValue<string | null>();
-      if (!v) return "—";
-      const isCredit = /credit|deposit/i.test(v);
-      return <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ${isCredit ? "bg-success/15 text-success" : "bg-secondary text-secondary-foreground"}`}>{v}</span>;
-    }},
-    { accessorKey: "name", header: "Name", cell: ({ getValue }) => <span className="text-sm">{getValue<string | null>() ?? "—"}</span> },
-    { accessorKey: "memo", header: "Memo", cell: ({ getValue }) => <span className="text-xs text-muted-foreground">{getValue<string | null>() ?? "—"}</span> },
-    {
-      id: "category",
-      accessorKey: "category_slug",
-      header: "Category",
-      enableSorting: false,
-      cell: ({ row }) => (
-        <select
-          value={row.original.category_id ?? ""}
-          onChange={(e) => onSetCategory(row.original.id, e.target.value)}
-          className="max-w-[180px] rounded-md border border-border bg-background px-2 py-1 text-xs"
-          aria-label="Set category"
-        >
-          <option value="">Uncategorized</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-      ),
-    },
-    { accessorKey: "amount", header: () => <div className="text-right">Amount</div>, cell: ({ getValue }) => {
-      const n = getValue<number>();
-      return <div className={`num-mono text-right font-medium ${n >= 0 ? "text-success" : "text-destructive"}`}>{formatMoney(n)}</div>;
-    }},
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [categories]);
+  const columns = useMemo<ColumnDef<Tx>[]>(
+    () => [
+      {
+        id: "select",
+        header: ({ table }) => (
+          <Checkbox
+            checked={
+              table.getIsAllRowsSelected()
+                ? true
+                : table.getIsSomeRowsSelected()
+                  ? "indeterminate"
+                  : false
+            }
+            onCheckedChange={(v) => table.toggleAllRowsSelected(!!v)}
+            aria-label="Select all"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(v) => row.toggleSelected(!!v)}
+            aria-label="Select row"
+          />
+        ),
+        enableSorting: false,
+        size: 40,
+      },
+      {
+        accessorKey: "tx_date",
+        header: "Date",
+        cell: ({ getValue }) => (
+          <span className="num-mono text-sm">{getValue<string | null>() ?? "—"}</span>
+        ),
+      },
+      {
+        accessorKey: "tx_type",
+        header: "Type",
+        cell: ({ getValue }) => {
+          const v = getValue<string | null>();
+          if (!v) return "—";
+          const isCredit = /credit|deposit/i.test(v);
+          return (
+            <span
+              className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ${isCredit ? "bg-success/15 text-success" : "bg-secondary text-secondary-foreground"}`}
+            >
+              {v}
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: "name",
+        header: "Name",
+        cell: ({ getValue }) => <span className="text-sm">{getValue<string | null>() ?? "—"}</span>,
+      },
+      {
+        accessorKey: "memo",
+        header: "Memo",
+        cell: ({ getValue }) => (
+          <span className="text-xs text-muted-foreground">{getValue<string | null>() ?? "—"}</span>
+        ),
+      },
+      {
+        id: "category",
+        accessorKey: "category_slug",
+        header: "Category",
+        enableSorting: false,
+        cell: ({ row }) => (
+          <select
+            value={row.original.category_id ?? ""}
+            onChange={(e) => onSetCategory(row.original.id, e.target.value)}
+            className="max-w-[180px] rounded-md border border-border bg-background px-2 py-1 text-xs"
+            aria-label="Set category"
+          >
+            <option value="">Uncategorized</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        ),
+      },
+      {
+        accessorKey: "amount",
+        header: () => <div className="text-right">Amount</div>,
+        cell: ({ getValue }) => {
+          const n = getValue<number>();
+          return (
+            <div
+              className={`num-mono text-right font-medium ${n >= 0 ? "text-success" : "text-destructive"}`}
+            >
+              {formatMoney(n)}
+            </div>
+          );
+        },
+      },
+    ],
+    [categories],
+  );
 
   const table = useReactTable({
     data: filtered,
@@ -200,7 +299,9 @@ function AccountDetail() {
     if (f) {
       uploadCsv.mutate(f, {
         onSuccess: (res) => {
-          toast.success(`Imported ${res.upload.inserted_count} new · ${res.upload.duplicate_count} duplicates`);
+          toast.success(
+            `Imported ${res.upload.inserted_count} new · ${res.upload.duplicate_count} duplicates`,
+          );
           if (res.job_ids.length > 0) setJobId(res.job_ids[0]);
         },
         onError: (err) => toast.error((err as Error).message),
@@ -211,7 +312,9 @@ function AccountDetail() {
 
   const runAnalysis = () => {
     analyzeAccount.mutate(accountId, {
-      onSuccess: (ids) => { if (ids.length > 0) setJobId(ids[0]); },
+      onSuccess: (ids) => {
+        if (ids.length > 0) setJobId(ids[0]);
+      },
       onError: (e) => toast.error((e as Error).message),
     });
   };
@@ -222,7 +325,9 @@ function AccountDetail() {
         <AppHeader email={user.email} />
         <div className="mx-auto max-w-3xl p-10 text-center">
           <p className="text-muted-foreground">Account not found.</p>
-          <Button className="mt-4" onClick={() => navigate({ to: "/dashboard" })}>Back to dashboard</Button>
+          <Button className="mt-4" onClick={() => navigate({ to: "/dashboard" })}>
+            Back to dashboard
+          </Button>
         </div>
       </div>
     );
@@ -232,29 +337,50 @@ function AccountDetail() {
     <div className="min-h-screen">
       <AppHeader email={user.email} />
       <main className="mx-auto max-w-[1400px] px-6 py-8">
-        <Link to="/dashboard" className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          to="/dashboard"
+          className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+        >
           <ArrowLeft className="h-4 w-4" /> All accounts
         </Link>
 
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">{account?.name ?? "Account"}</h1>
-            <p className="mt-1 text-sm capitalize text-muted-foreground">{(account?.type ?? "").replace("_", " ")}</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-3xl font-bold">{account?.name ?? "Account"}</h1>
+              {account && <AccountBalanceInline account={account} />}
+            </div>
+            <p className="mt-1 text-sm capitalize text-muted-foreground">
+              {(account?.type ?? "").replace("_", " ")}
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <input ref={fileRef} type="file" accept=".csv,text/csv" hidden onChange={onFilePick} />
-            <Button onClick={() => fileRef.current?.click()} disabled={uploadCsv.isPending}>
-              <Upload className="mr-2 h-4 w-4" /> {uploadCsv.isPending ? "Importing…" : "Upload CSV"}
+            <Button
+              onClick={() => {
+                // Non-blocking nudge: an account without a balance can't get a
+                // back-calculated timeline, so suggest setting one — but never
+                // stop the upload.
+                if (account && account.current_balance == null) setShowBalanceNudge(true);
+                fileRef.current?.click();
+              }}
+              disabled={uploadCsv.isPending}
+            >
+              <Upload className="mr-2 h-4 w-4" />{" "}
+              {uploadCsv.isPending ? "Importing…" : "Upload CSV"}
             </Button>
             {allTx.length > 0 && (
               <Button
                 variant="secondary"
                 onClick={() => {
                   if (confirm("Delete ALL transactions in this account?"))
-                    deleteTx.mutate({ all: true }, {
-                      onSuccess: () => toast.success("All transactions cleared"),
-                      onError: (e) => toast.error((e as Error).message),
-                    });
+                    deleteTx.mutate(
+                      { all: true },
+                      {
+                        onSuccess: () => toast.success("All transactions cleared"),
+                        onError: (e) => toast.error((e as Error).message),
+                      },
+                    );
                 }}
               >
                 <Trash2 className="mr-2 h-4 w-4" /> Clear all
@@ -263,10 +389,33 @@ function AccountDetail() {
           </div>
         </div>
 
+        {showBalanceNudge && account && account.current_balance == null && (
+          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm">
+            <Lightbulb className="h-4 w-4 shrink-0 text-primary" />
+            <span className="text-muted-foreground">
+              Tip: set this account's current balance first so FinWise can back-calculate your
+              balance history.
+            </span>
+            <BalanceEditPopover account={account}>
+              <Button variant="secondary" size="sm">
+                Set balance
+              </Button>
+            </BalanceEditPopover>
+            <button
+              onClick={() => setShowBalanceNudge(false)}
+              className="ml-auto rounded-md p-1 text-muted-foreground hover:text-foreground"
+              aria-label="Dismiss tip"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {analyzing && (
           <div className="mt-4 flex items-center gap-2 rounded-lg border border-border bg-secondary/40 px-4 py-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            Analyzing… {job ? `${job.status} · ${job.progress}%` : "queued"} — categorizing merchants
+            Analyzing… {job ? `${job.status} · ${job.progress}%` : "queued"} — categorizing
+            merchants
           </div>
         )}
 
@@ -277,7 +426,12 @@ function AccountDetail() {
           </TabsList>
 
           <TabsContent value="transactions">
-            <StatsBar stats={stats} selected={selectedRows.length} total={allTx.length} visible={visibleRows.length} />
+            <StatsBar
+              stats={stats}
+              selected={selectedRows.length}
+              total={allTx.length}
+              visible={visibleRows.length}
+            />
 
             {/* Toolbar */}
             <div className="mt-6 flex flex-wrap items-center gap-2">
@@ -293,8 +447,27 @@ function AccountDetail() {
 
               <FilterMenu colFilters={colFilters} setColFilters={setColFilters} />
 
-              {(globalFilter || Object.values(colFilters).some((v) => (typeof v === "boolean" ? v : Boolean(v)))) && (
-                <Button variant="ghost" onClick={() => { setGlobalFilter(""); setColFilters({ name: "", memo: "", type: "", minAmount: "", maxAmount: "", from: "", to: "", onlyDebits: false, onlyCredits: false }); }}>
+              {(globalFilter ||
+                Object.values(colFilters).some((v) =>
+                  typeof v === "boolean" ? v : Boolean(v),
+                )) && (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setGlobalFilter("");
+                    setColFilters({
+                      name: "",
+                      memo: "",
+                      type: "",
+                      minAmount: "",
+                      maxAmount: "",
+                      from: "",
+                      to: "",
+                      onlyDebits: false,
+                      onlyCredits: false,
+                    });
+                  }}
+                >
                   <X className="mr-1 h-4 w-4" /> Clear
                 </Button>
               )}
@@ -303,11 +476,23 @@ function AccountDetail() {
                 <Button
                   variant="secondary"
                   onClick={() => {
-                    if (confirm(`Delete ${selectedRows.length} selected row${selectedRows.length === 1 ? "" : "s"}?`))
-                      deleteTx.mutate({ ids: selectedRows.map((r) => r.id) }, {
-                        onSuccess: (res) => { toast.success(`Deleted ${res.deleted} row${res.deleted === 1 ? "" : "s"}`); setRowSelection({}); },
-                        onError: (e) => toast.error((e as Error).message),
-                      });
+                    if (
+                      confirm(
+                        `Delete ${selectedRows.length} selected row${selectedRows.length === 1 ? "" : "s"}?`,
+                      )
+                    )
+                      deleteTx.mutate(
+                        { ids: selectedRows.map((r) => r.id) },
+                        {
+                          onSuccess: (res) => {
+                            toast.success(
+                              `Deleted ${res.deleted} row${res.deleted === 1 ? "" : "s"}`,
+                            );
+                            setRowSelection({});
+                          },
+                          onError: (e) => toast.error((e as Error).message),
+                        },
+                      );
                   }}
                 >
                   <Trash2 className="mr-2 h-4 w-4" /> Delete {selectedRows.length}
@@ -323,14 +508,22 @@ function AccountDetail() {
                     {table.getHeaderGroups().map((hg) => (
                       <tr key={hg.id}>
                         {hg.headers.map((h) => (
-                          <th key={h.id} className="whitespace-nowrap px-4 py-3 text-left font-medium">
+                          <th
+                            key={h.id}
+                            className="whitespace-nowrap px-4 py-3 text-left font-medium"
+                          >
                             {h.isPlaceholder ? null : h.column.getCanSort() ? (
                               <button
                                 onClick={h.column.getToggleSortingHandler()}
                                 className="inline-flex items-center gap-1.5 hover:text-foreground"
                               >
                                 {flexRender(h.column.columnDef.header, h.getContext())}
-                                {{ asc: <ArrowUp className="h-3 w-3" />, desc: <ArrowDown className="h-3 w-3" /> }[h.column.getIsSorted() as string] ?? <ArrowUpDown className="h-3 w-3 opacity-50" />}
+                                {{
+                                  asc: <ArrowUp className="h-3 w-3" />,
+                                  desc: <ArrowDown className="h-3 w-3" />,
+                                }[h.column.getIsSorted() as string] ?? (
+                                  <ArrowUpDown className="h-3 w-3 opacity-50" />
+                                )}
                               </button>
                             ) : (
                               flexRender(h.column.columnDef.header, h.getContext())
@@ -342,16 +535,31 @@ function AccountDetail() {
                   </thead>
                   <tbody>
                     {txQuery.isLoading ? (
-                      <tr><td colSpan={columns.length} className="p-10 text-center text-muted-foreground">Loading…</td></tr>
+                      <tr>
+                        <td
+                          colSpan={columns.length}
+                          className="p-10 text-center text-muted-foreground"
+                        >
+                          Loading…
+                        </td>
+                      </tr>
                     ) : table.getRowModel().rows.length === 0 ? (
                       <tr>
                         <td colSpan={columns.length} className="p-16 text-center">
-                          <p className="text-muted-foreground">{allTx.length === 0 ? "No transactions yet. Upload a CSV to get started." : "No rows match your filters."}</p>
+                          <p className="text-muted-foreground">
+                            {allTx.length === 0
+                              ? "No transactions yet. Upload a CSV to get started."
+                              : "No rows match your filters."}
+                          </p>
                         </td>
                       </tr>
                     ) : (
                       table.getRowModel().rows.map((row) => (
-                        <tr key={row.id} data-selected={row.getIsSelected()} className="border-t border-border/60 transition hover:bg-secondary/40 data-[selected=true]:bg-primary/5">
+                        <tr
+                          key={row.id}
+                          data-selected={row.getIsSelected()}
+                          className="border-t border-border/60 transition hover:bg-secondary/40 data-[selected=true]:bg-primary/5"
+                        >
                           {row.getVisibleCells().map((cell) => (
                             <td key={cell.id} className="whitespace-nowrap px-4 py-2.5">
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -364,19 +572,27 @@ function AccountDetail() {
                 </table>
               </div>
               <div className="flex items-center justify-between border-t border-border/60 bg-secondary/30 px-4 py-2 text-xs text-muted-foreground">
-                <span>{visibleRows.length} of {allTx.length} rows{selectedRows.length > 0 ? ` · ${selectedRows.length} selected` : ""}</span>
-                <span>Click column headers to sort · Use checkboxes for spreadsheet-style selection</span>
+                <span>
+                  {visibleRows.length} of {allTx.length} rows
+                  {selectedRows.length > 0 ? ` · ${selectedRows.length} selected` : ""}
+                </span>
+                <span>
+                  Click column headers to sort · Use checkboxes for spreadsheet-style selection
+                </span>
               </div>
             </div>
 
             {/* Frequency breakdown */}
-            {statsSource.length > 0 && (
-              <FrequencyBreakdown rows={statsSource} />
-            )}
+            {statsSource.length > 0 && <FrequencyBreakdown rows={statsSource} />}
           </TabsContent>
 
           <TabsContent value="analysis">
-            <AccountAnalysis accountId={accountId} analyzing={analyzing} onRun={runAnalysis} />
+            <AccountAnalysis
+              accountId={accountId}
+              account={account}
+              analyzing={analyzing}
+              onRun={runAnalysis}
+            />
           </TabsContent>
         </Tabs>
       </main>
@@ -384,8 +600,43 @@ function AccountDetail() {
   );
 }
 
-function AccountAnalysis({ accountId, analyzing, onRun }: {
+// AccountBalanceInline shows the account's balance (or "No balance set") next
+// to the title with an inline edit popover.
+function AccountBalanceInline({ account }: { account: AccountSummary }) {
+  return (
+    <BalanceEditPopover account={account}>
+      <button
+        className="group inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-secondary/40 px-3 py-1.5 text-sm transition hover:border-primary/40"
+        aria-label="Edit balance"
+      >
+        {account.current_balance != null ? (
+          <>
+            <span
+              className={`num-mono font-semibold ${account.current_balance >= 0 ? "text-success" : "text-destructive"}`}
+            >
+              {formatBalance(account.type, account.current_balance)}
+            </span>
+            {account.balance_as_of && (
+              <span className="text-xs text-muted-foreground">as of {account.balance_as_of}</span>
+            )}
+          </>
+        ) : (
+          <span className="text-muted-foreground">No balance set</span>
+        )}
+        <Pencil className="h-3 w-3 text-muted-foreground opacity-60 transition group-hover:opacity-100" />
+      </button>
+    </BalanceEditPopover>
+  );
+}
+
+function AccountAnalysis({
+  accountId,
+  account,
+  analyzing,
+  onRun,
+}: {
   accountId: string;
+  account: AccountSummary | undefined;
   analyzing: boolean;
   onRun: () => void;
 }) {
@@ -399,21 +650,52 @@ function AccountAnalysis({ accountId, analyzing, onRun }: {
           <h2 className="text-lg font-semibold">Account analysis</h2>
         </div>
         <Button variant="secondary" size="sm" onClick={onRun} disabled={analyzing}>
-          {analyzing ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing…</> : "Re-run analysis"}
+          {analyzing ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analyzing…
+            </>
+          ) : (
+            "Re-run analysis"
+          )}
         </Button>
       </div>
 
       {isLoading ? (
-        <div className="glass-card grid place-items-center rounded-2xl p-12 text-sm text-muted-foreground">Loading…</div>
+        <div className="glass-card grid place-items-center rounded-2xl p-12 text-sm text-muted-foreground">
+          Loading…
+        </div>
       ) : !result ? (
         <div className="glass-card grid place-items-center rounded-2xl p-12 text-center">
           <h3 className="text-lg font-semibold">No analysis yet</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Upload a CSV or run analysis to see categorized spending, cash flow, recurring charges, fees, and insights.</p>
-          <Button className="mt-4" onClick={onRun} disabled={analyzing}>{analyzing ? "Analyzing…" : "Run analysis"}</Button>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Upload a CSV or run analysis to see categorized spending, cash flow, recurring charges,
+            fees, and insights.
+          </p>
+          <Button className="mt-4" onClick={onRun} disabled={analyzing}>
+            {analyzing ? "Analyzing…" : "Run analysis"}
+          </Button>
         </div>
       ) : (
         <div className="space-y-6">
           <StatCards totals={result.totals} fees={result.fees} />
+          {result.balance ? (
+            <BalanceTimeline balance={result.balance} />
+          ) : (
+            account && (
+              <div className="glass-card flex flex-wrap items-center gap-3 rounded-2xl px-5 py-4">
+                <Wallet className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  No balance timeline yet — set this account's current balance and re-run analysis
+                  to back-calculate your balance history.
+                </p>
+                <BalanceEditPopover account={account}>
+                  <Button variant="secondary" size="sm">
+                    Set balance
+                  </Button>
+                </BalanceEditPopover>
+              </div>
+            )
+          )}
           <div className="grid gap-6 lg:grid-cols-2">
             <CategoryBreakdown categories={result.categories} />
             <MonthlyCashflow monthly={result.monthly} />
@@ -427,36 +709,109 @@ function AccountAnalysis({ accountId, analyzing, onRun }: {
   );
 }
 
-function FilterMenu({ colFilters, setColFilters }: {
-  colFilters: { name: string; memo: string; type: string; minAmount: string; maxAmount: string; from: string; to: string; onlyDebits: boolean; onlyCredits: boolean; };
-  setColFilters: React.Dispatch<React.SetStateAction<{ name: string; memo: string; type: string; minAmount: string; maxAmount: string; from: string; to: string; onlyDebits: boolean; onlyCredits: boolean }>>;
+function FilterMenu({
+  colFilters,
+  setColFilters,
+}: {
+  colFilters: {
+    name: string;
+    memo: string;
+    type: string;
+    minAmount: string;
+    maxAmount: string;
+    from: string;
+    to: string;
+    onlyDebits: boolean;
+    onlyCredits: boolean;
+  };
+  setColFilters: React.Dispatch<
+    React.SetStateAction<{
+      name: string;
+      memo: string;
+      type: string;
+      minAmount: string;
+      maxAmount: string;
+      from: string;
+      to: string;
+      onlyDebits: boolean;
+      onlyCredits: boolean;
+    }>
+  >;
 }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="secondary"><Filter className="mr-2 h-4 w-4" /> Column filters</Button>
+        <Button variant="secondary">
+          <Filter className="mr-2 h-4 w-4" /> Column filters
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 p-3">
         <DropdownMenuLabel>Filter by column</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <div className="grid gap-3 py-2">
-          <FilterField label="Name contains" value={colFilters.name} onChange={(v) => setColFilters((s) => ({ ...s, name: v }))} />
-          <FilterField label="Memo contains" value={colFilters.memo} onChange={(v) => setColFilters((s) => ({ ...s, memo: v }))} />
-          <FilterField label="Type contains" value={colFilters.type} onChange={(v) => setColFilters((s) => ({ ...s, type: v }))} />
+          <FilterField
+            label="Name contains"
+            value={colFilters.name}
+            onChange={(v) => setColFilters((s) => ({ ...s, name: v }))}
+          />
+          <FilterField
+            label="Memo contains"
+            value={colFilters.memo}
+            onChange={(v) => setColFilters((s) => ({ ...s, memo: v }))}
+          />
+          <FilterField
+            label="Type contains"
+            value={colFilters.type}
+            onChange={(v) => setColFilters((s) => ({ ...s, type: v }))}
+          />
           <div className="grid grid-cols-2 gap-2">
-            <FilterField label="Min amount" value={colFilters.minAmount} onChange={(v) => setColFilters((s) => ({ ...s, minAmount: v }))} type="number" />
-            <FilterField label="Max amount" value={colFilters.maxAmount} onChange={(v) => setColFilters((s) => ({ ...s, maxAmount: v }))} type="number" />
+            <FilterField
+              label="Min amount"
+              value={colFilters.minAmount}
+              onChange={(v) => setColFilters((s) => ({ ...s, minAmount: v }))}
+              type="number"
+            />
+            <FilterField
+              label="Max amount"
+              value={colFilters.maxAmount}
+              onChange={(v) => setColFilters((s) => ({ ...s, maxAmount: v }))}
+              type="number"
+            />
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <FilterField label="From date" value={colFilters.from} onChange={(v) => setColFilters((s) => ({ ...s, from: v }))} type="date" />
-            <FilterField label="To date" value={colFilters.to} onChange={(v) => setColFilters((s) => ({ ...s, to: v }))} type="date" />
+            <FilterField
+              label="From date"
+              value={colFilters.from}
+              onChange={(v) => setColFilters((s) => ({ ...s, from: v }))}
+              type="date"
+            />
+            <FilterField
+              label="To date"
+              value={colFilters.to}
+              onChange={(v) => setColFilters((s) => ({ ...s, to: v }))}
+              type="date"
+            />
           </div>
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuCheckboxItem checked={colFilters.onlyDebits} onCheckedChange={(v) => setColFilters((s) => ({ ...s, onlyDebits: !!v, onlyCredits: v ? false : s.onlyCredits }))}>
+        <DropdownMenuCheckboxItem
+          checked={colFilters.onlyDebits}
+          onCheckedChange={(v) =>
+            setColFilters((s) => ({
+              ...s,
+              onlyDebits: !!v,
+              onlyCredits: v ? false : s.onlyCredits,
+            }))
+          }
+        >
           Only debits (money out)
         </DropdownMenuCheckboxItem>
-        <DropdownMenuCheckboxItem checked={colFilters.onlyCredits} onCheckedChange={(v) => setColFilters((s) => ({ ...s, onlyCredits: !!v, onlyDebits: v ? false : s.onlyDebits }))}>
+        <DropdownMenuCheckboxItem
+          checked={colFilters.onlyCredits}
+          onCheckedChange={(v) =>
+            setColFilters((s) => ({ ...s, onlyCredits: !!v, onlyDebits: v ? false : s.onlyDebits }))
+          }
+        >
           Only credits (money in)
         </DropdownMenuCheckboxItem>
       </DropdownMenuContent>
@@ -464,29 +819,68 @@ function FilterMenu({ colFilters, setColFilters }: {
   );
 }
 
-function FilterField({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
+function FilterField({
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+}) {
   return (
     <label className="block text-xs">
       <span className="text-muted-foreground">{label}</span>
-      <Input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 h-8" />
+      <Input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 h-8"
+      />
     </label>
   );
 }
 
-type Stats = { total: number; count: number; credits: number; debits: number; avg: number; min: number; max: number };
+type Stats = {
+  total: number;
+  count: number;
+  credits: number;
+  debits: number;
+  avg: number;
+  min: number;
+  max: number;
+};
 function computeStats(rows: Tx[]): Stats {
-  if (rows.length === 0) return { total: 0, count: 0, credits: 0, debits: 0, avg: 0, min: 0, max: 0 };
-  let total = 0, credits = 0, debits = 0, min = Infinity, max = -Infinity;
+  if (rows.length === 0)
+    return { total: 0, count: 0, credits: 0, debits: 0, avg: 0, min: 0, max: 0 };
+  let total = 0,
+    credits = 0,
+    debits = 0,
+    min = Infinity,
+    max = -Infinity;
   for (const r of rows) {
     total += r.amount;
-    if (r.amount > 0) credits += r.amount; else debits += r.amount;
+    if (r.amount > 0) credits += r.amount;
+    else debits += r.amount;
     if (r.amount < min) min = r.amount;
     if (r.amount > max) max = r.amount;
   }
   return { total, count: rows.length, credits, debits, avg: total / rows.length, min, max };
 }
 
-function StatsBar({ stats, selected, total, visible }: { stats: Stats; selected: number; total: number; visible: number }) {
+function StatsBar({
+  stats,
+  selected,
+  total,
+  visible,
+}: {
+  stats: Stats;
+  selected: number;
+  total: number;
+  visible: number;
+}) {
   const scope = selected > 0 ? `${selected} selected` : `${visible} filtered of ${total}`;
   return (
     <div className="glass-card mt-6 rounded-xl p-4">
@@ -495,7 +889,11 @@ function StatsBar({ stats, selected, total, visible }: { stats: Stats; selected:
         Live stats · <span className="font-medium text-foreground">{scope}</span>
       </div>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
-        <Stat label="Sum" value={formatMoney(stats.total)} accent={stats.total >= 0 ? "success" : "destructive"} />
+        <Stat
+          label="Sum"
+          value={formatMoney(stats.total)}
+          accent={stats.total >= 0 ? "success" : "destructive"}
+        />
         <Stat label="Count" value={String(stats.count)} />
         <Stat label="Money in" value={formatMoney(stats.credits)} accent="success" />
         <Stat label="Money out" value={formatMoney(stats.debits)} accent="destructive" />
@@ -506,11 +904,23 @@ function StatsBar({ stats, selected, total, visible }: { stats: Stats; selected:
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent?: "success" | "destructive" }) {
+function Stat({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: "success" | "destructive";
+}) {
   return (
     <div>
       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className={`num-mono mt-0.5 text-sm font-semibold ${accent === "success" ? "text-success" : accent === "destructive" ? "text-destructive" : ""}`}>{value}</p>
+      <p
+        className={`num-mono mt-0.5 text-sm font-semibold ${accent === "success" ? "text-success" : accent === "destructive" ? "text-destructive" : ""}`}
+      >
+        {value}
+      </p>
     </div>
   );
 }
@@ -555,7 +965,11 @@ function FrequencyBreakdown({ rows }: { rows: Tx[] }) {
                 <tr key={g.name} className="border-t border-border/60">
                   <td className="px-3 py-2">{g.name}</td>
                   <td className="num-mono px-3 py-2 text-right">{g.count}</td>
-                  <td className={`num-mono px-3 py-2 text-right ${g.total >= 0 ? "text-success" : "text-destructive"}`}>{formatMoney(g.total)}</td>
+                  <td
+                    className={`num-mono px-3 py-2 text-right ${g.total >= 0 ? "text-success" : "text-destructive"}`}
+                  >
+                    {formatMoney(g.total)}
+                  </td>
                   <td className="num-mono px-3 py-2 text-xs text-muted-foreground">
                     {dates.length > 0 ? `${dates[0]} → ${dates[dates.length - 1]}` : "—"}
                   </td>

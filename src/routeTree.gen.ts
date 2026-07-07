@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedInvestmentsRouteImport } from './routes/_authenticated/investments'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedInvestmentsHoldingIdRouteImport } from './routes/_authenticated/investments_.$holdingId'
 import { Route as AuthenticatedAccountsAccountIdRouteImport } from './routes/_authenticated/accounts.$accountId'
 
 const AuthRoute = AuthRouteImport.update({
@@ -29,11 +31,23 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedInvestmentsRoute =
+  AuthenticatedInvestmentsRouteImport.update({
+    id: '/investments',
+    path: '/investments',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedInvestmentsHoldingIdRoute =
+  AuthenticatedInvestmentsHoldingIdRouteImport.update({
+    id: '/investments_/$holdingId',
+    path: '/investments/$holdingId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAccountsAccountIdRoute =
   AuthenticatedAccountsAccountIdRouteImport.update({
     id: '/accounts/$accountId',
@@ -45,13 +59,17 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/investments': typeof AuthenticatedInvestmentsRoute
   '/accounts/$accountId': typeof AuthenticatedAccountsAccountIdRoute
+  '/investments/$holdingId': typeof AuthenticatedInvestmentsHoldingIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/investments': typeof AuthenticatedInvestmentsRoute
   '/accounts/$accountId': typeof AuthenticatedAccountsAccountIdRoute
+  '/investments/$holdingId': typeof AuthenticatedInvestmentsHoldingIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -59,20 +77,36 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/investments': typeof AuthenticatedInvestmentsRoute
   '/_authenticated/accounts/$accountId': typeof AuthenticatedAccountsAccountIdRoute
+  '/_authenticated/investments_/$holdingId': typeof AuthenticatedInvestmentsHoldingIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/dashboard' | '/accounts/$accountId'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/dashboard'
+    | '/investments'
+    | '/accounts/$accountId'
+    | '/investments/$holdingId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/dashboard' | '/accounts/$accountId'
+  to:
+    | '/'
+    | '/auth'
+    | '/dashboard'
+    | '/investments'
+    | '/accounts/$accountId'
+    | '/investments/$holdingId'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/dashboard'
+    | '/_authenticated/investments'
     | '/_authenticated/accounts/$accountId'
+    | '/_authenticated/investments_/$holdingId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -104,11 +138,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/investments': {
+      id: '/_authenticated/investments'
+      path: '/investments'
+      fullPath: '/investments'
+      preLoaderRoute: typeof AuthenticatedInvestmentsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/investments_/$holdingId': {
+      id: '/_authenticated/investments_/$holdingId'
+      path: '/investments/$holdingId'
+      fullPath: '/investments/$holdingId'
+      preLoaderRoute: typeof AuthenticatedInvestmentsHoldingIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/accounts/$accountId': {
@@ -123,12 +171,17 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedInvestmentsRoute: typeof AuthenticatedInvestmentsRoute
   AuthenticatedAccountsAccountIdRoute: typeof AuthenticatedAccountsAccountIdRoute
+  AuthenticatedInvestmentsHoldingIdRoute: typeof AuthenticatedInvestmentsHoldingIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedInvestmentsRoute: AuthenticatedInvestmentsRoute,
   AuthenticatedAccountsAccountIdRoute: AuthenticatedAccountsAccountIdRoute,
+  AuthenticatedInvestmentsHoldingIdRoute:
+    AuthenticatedInvestmentsHoldingIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

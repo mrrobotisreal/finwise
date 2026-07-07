@@ -32,8 +32,14 @@ export function useAccount(accountId: string) {
 export function useCreateAccount() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { name: string; type: AccountType }) =>
-      (await apiPost("/api/accounts", accountResponse, input)).account,
+    mutationFn: async (input: {
+      name: string;
+      type: AccountType;
+      // Signed balance (see toSignedBalance in lib/format.ts); as-of defaults
+      // to today server-side when omitted.
+      current_balance?: number;
+      balance_as_of?: string;
+    }) => (await apiPost("/api/accounts", accountResponse, input)).account,
     onSuccess: () => qc.invalidateQueries({ queryKey: accountsKey }),
   });
 }
@@ -46,6 +52,7 @@ export function useUpdateAccount() {
       name?: string;
       type?: AccountType;
       current_balance?: number;
+      balance_as_of?: string;
     }) => {
       const { id, ...patch } = input;
       return (await apiPatch(`/api/accounts/${id}`, accountResponse, patch)).account;

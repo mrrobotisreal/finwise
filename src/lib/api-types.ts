@@ -27,7 +27,10 @@ export const accountSchema = z.object({
   id: z.string(),
   name: z.string(),
   type: accountTypeSchema,
+  // True signed balance: negative for credit cards / loans (money owed).
   current_balance: z.number().nullable(),
+  // ISO date the balance was accurate on; anchors the back-calculated history.
+  balance_as_of: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -197,6 +200,40 @@ export const aiBlockSchema = z.object({
   model: z.string(),
 });
 
+// Balance history back-calculated from the account's (current_balance,
+// balance_as_of) anchor. Present only on account-scope documents for accounts
+// with a balance set; .optional() keeps older stored results valid.
+export const balancePointSchema = z.object({
+  date: z.string(),
+  balance: z.number(),
+});
+export const balanceBlockSchema = z.object({
+  current_balance: z.number(),
+  as_of: z.string(),
+  implied_starting_balance: z.number(),
+  starting_date: z.string(),
+  running: z.array(balancePointSchema),
+  min: balancePointSchema,
+  max: balancePointSchema,
+  reconciliation_note: z.string().nullable(),
+});
+
+// Assets/debts/net rollup on the all-scope document.
+export const netPositionAccountSchema = z.object({
+  account_id: z.string(),
+  name: z.string(),
+  type: z.string(),
+  current_balance: z.number(),
+  as_of: z.string(),
+});
+export const netPositionSchema = z.object({
+  total_assets: z.number(),
+  total_debts: z.number(),
+  net: z.number(),
+  per_account: z.array(netPositionAccountSchema),
+  accounts_missing_balance: z.array(z.string()),
+});
+
 export const analysisDocumentSchema = z.object({
   period: periodSchema,
   totals: totalsSchema,
@@ -207,9 +244,14 @@ export const analysisDocumentSchema = z.object({
   top_merchants: z.array(merchantStatSchema),
   largest_transactions: z.array(largestTxnSchema),
   per_account: z.array(perAccountSchema).optional(),
+  balance: balanceBlockSchema.optional(),
+  net_position: netPositionSchema.optional(),
   ai: aiBlockSchema,
 });
 export type AnalysisDocument = z.infer<typeof analysisDocumentSchema>;
+export type BalanceBlock = z.infer<typeof balanceBlockSchema>;
+export type BalancePoint = z.infer<typeof balancePointSchema>;
+export type NetPosition = z.infer<typeof netPositionSchema>;
 export type CategoryStat = z.infer<typeof categoryStatSchema>;
 export type MonthlyStat = z.infer<typeof monthlyStatSchema>;
 export type RecurringItem = z.infer<typeof recurringItemSchema>;
@@ -223,3 +265,79 @@ export type MerchantStat = z.infer<typeof merchantStatSchema>;
 
 // The analysis endpoints wrap the document (or null for empty-state).
 export const analysisResponse = z.object({ result: analysisDocumentSchema.nullable() });
+
+// --- Investments: stocks (Polygon proxy) ------------------------------------
+export const tickerResultSchema = z.object({
+  ticker: z.string(),
+  name: z.string(),
+  primary_exchange: z.string(),
+  currency: z.string(),
+});
+export type TickerResult = z.infer<typeof tickerResultSchema>;
+export const stockSearchResponse = z.object({ results: z.array(tickerResultSchema) });
+
+export const dayPriceResponse = z.object({
+  date: z.string(),
+  open: z.number(),
+  high: z.number(),
+  low: z.number(),
+  close: z.number(),
+  // The trading day actually used (differs from date on weekends/holidays).
+  actual_date: z.string(),
+});
+export type DayPrice = z.infer<typeof dayPriceResponse>;
+
+export const stockBarSchema = z.object({
+  t: z.number(), // unix seconds UTC
+  o: z.number(),
+  h: z.number(),
+  l: z.number(),
+  c: z.number(),
+  v: z.number(),
+});
+export type StockBar = z.infer<typeof stockBarSchema>;
+export const stockBarsResponse = z.object({
+  range: z.string(),
+  timespan: z.string(),
+  bars: z.array(stockBarSchema),
+});
+export type StockBars = z.infer<typeof stockBarsResponse>;
+
+export const stockQuoteResponse = z.object({
+  ticker: z.string(),
+  prev_close: z.number(),
+  latest_close: z.number(),
+  latest_time: z.number(),
+});
+export type StockQuote = z.infer<typeof stockQuoteResponse>;
+
+// --- Investments: holdings ---------------------------------------------------
+// quantity is an exact decimal STRING end-to-end — never a JS number.
+export const holdingSchema = z.object({
+  id: z.string(),
+  asset_class: z.string(),
+  ticker: z.string(),
+  name: z.string().nullable(),
+  quantity: z.string(),
+  purchase_date: z.string(),
+  purchase_price: z.number(),
+  day_low: z.number().nullable(),
+  day_high: z.number().nullable(),
+  notes: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export type Holding = z.infer<typeof holdingSchema>;
+
+// GET /api/holdings enriches each row; fields are null when no quote exists.
+export const enrichedHoldingSchema = holdingSchema.extend({
+  latest_close: z.number().nullable(),
+  market_value: z.number().nullable(),
+  cost_basis: z.number().nullable(),
+  gain_abs: z.number().nullable(),
+  gain_pct: z.number().nullable(),
+});
+export type EnrichedHolding = z.infer<typeof enrichedHoldingSchema>;
+
+export const holdingsResponse = z.object({ holdings: z.array(enrichedHoldingSchema) });
+export const holdingResponse = z.object({ holding: holdingSchema });
