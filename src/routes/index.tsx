@@ -11,7 +11,7 @@ function Landing() {
       <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
         <div className="flex items-center gap-2">
           <img src="/FinWise.webp" alt="FinWise" className="h-9 w-9 rounded-lg object-cover" />
-          <span className="font-display text-xl font-semibold">FinWise</span>
+          <span className="font-title text-xl font-bold tracking-wide">FinWise</span>
         </div>
         <nav className="flex items-center gap-3">
           <Link to="/auth" className="inline-flex items-center gap-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90">
@@ -25,8 +25,12 @@ function Landing() {
           <img
             src="/FinWise.webp"
             alt="FinWise"
-            className="mx-auto mb-8 h-28 w-28 rounded-2xl object-cover shadow-[var(--shadow-glow)] md:h-32 md:w-32"
+            className="mx-auto mb-6 h-28 w-28 rounded-2xl object-cover shadow-[var(--shadow-glow)] md:h-32 md:w-32"
           />
+          <div className="font-title text-4xl font-bold tracking-wide md:text-5xl">FinWise</div>
+          <p className="font-slogan mt-3 mb-8 text-lg font-medium text-muted-foreground">
+            See the Flow. Command the Future.
+          </p>
           <div className="mx-auto mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-secondary/60 px-3 py-1 text-xs text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-primary" />
             Your private financial workspace
