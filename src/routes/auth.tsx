@@ -1,8 +1,8 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute, Link, redirect, useNavigate, useRouter } from "@tanstack/react-router";
+import { useState } from "react";
 import { z } from "zod";
-import { onAuthStateChanged, signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/integrations/firebase/client";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth, authReady } from "@/integrations/firebase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,13 @@ import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
+  ssr: false,
+  // If a session already exists (fresh page load / restored token), send the
+  // user straight to the dashboard instead of showing the sign-in form.
+  beforeLoad: async () => {
+    await authReady;
+    if (auth.currentUser) throw redirect({ to: "/dashboard" });
+  },
   component: AuthPage,
 });
 
@@ -20,17 +27,10 @@ const credentialsSchema = z.object({
 
 function AuthPage() {
   const navigate = useNavigate();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // Already signed in → straight to the dashboard.
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) navigate({ to: "/dashboard" });
-    });
-    return () => unsubscribe();
-  }, [navigate]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,14 +39,16 @@ function AuthPage() {
       const parsed = credentialsSchema.parse({ email, password });
       await signInWithEmailAndPassword(auth, parsed.email, parsed.password);
       toast.success("Welcome back.");
-      // Navigation is driven by the onAuthStateChanged effect below once the
-      // auth state actually settles — navigating here would race Firebase's
-      // state propagation and can land beforeLoad on a not-yet-populated user.
+      // auth.currentUser is now set. Re-run the route guards: /auth's beforeLoad
+      // sees the signed-in user and redirects to /dashboard — the exact same
+      // beforeLoad mechanism that already works on a hard refresh. The explicit
+      // navigate is a belt-and-suspenders fallback.
+      await router.invalidate();
+      await navigate({ to: "/dashboard" });
     } catch (err) {
       // Never leak whether the email exists — one generic message for every
       // Firebase auth failure. Zod validation errors show their own message.
-      const msg =
-        err instanceof z.ZodError ? err.errors[0].message : "Invalid credentials.";
+      const msg = err instanceof z.ZodError ? err.errors[0].message : "Invalid credentials.";
       toast.error(msg);
     } finally {
       setLoading(false);

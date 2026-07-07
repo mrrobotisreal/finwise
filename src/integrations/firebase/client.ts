@@ -8,6 +8,7 @@ import {
   getAuth,
   setPersistence,
   browserLocalPersistence,
+  onAuthStateChanged,
   type Auth,
 } from "firebase/auth";
 
@@ -62,3 +63,18 @@ export const auth = new Proxy({} as Auth, {
     return Reflect.getPrototypeOf(getFirebaseAuth());
   },
 });
+
+// authReady resolves once Firebase has determined the initial auth state —
+// either a persisted session was restored or there is none. Route guards
+// `await` this before reading `auth.currentUser` so they never act on an
+// auth instance that hasn't finished initializing. This is the same signal
+// that makes a hard refresh land you on the dashboard; login reuses it.
+export const authReady: Promise<void> =
+  typeof window === "undefined"
+    ? Promise.resolve()
+    : new Promise<void>((resolve) => {
+        const unsubscribe = onAuthStateChanged(getFirebaseAuth(), () => {
+          unsubscribe();
+          resolve();
+        });
+      });
