@@ -1,18 +1,17 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { signOut } from "firebase/auth";
 import { auth } from "@/integrations/firebase/client";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
 
 export function AppHeader({ email }: { email?: string | null }) {
-  const navigate = useNavigate();
-  const qc = useQueryClient();
   const handleSignOut = async () => {
-    await qc.cancelQueries();
-    qc.clear();
     await signOut(auth);
-    navigate({ to: "/auth", replace: true });
+    // Full navigation to the auth screen. This is the same path as a manual
+    // hard reload — which reliably re-runs the route guards — so it works even
+    // though in-app router transitions weren't re-rendering after sign-out.
+    // The fresh load also discards the React Query cache, so no manual clear.
+    window.location.replace("/auth");
   };
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 bg-background/70 backdrop-blur-xl">

@@ -1,4 +1,4 @@
-import { createFileRoute, Link, redirect, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
 import { signInWithEmailAndPassword } from "firebase/auth";
@@ -26,8 +26,6 @@ const credentialsSchema = z.object({
 });
 
 function AuthPage() {
-  const navigate = useNavigate();
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,19 +36,16 @@ function AuthPage() {
     try {
       const parsed = credentialsSchema.parse({ email, password });
       await signInWithEmailAndPassword(auth, parsed.email, parsed.password);
-      toast.success("Welcome back.");
-      // auth.currentUser is now set. Re-run the route guards: /auth's beforeLoad
-      // sees the signed-in user and redirects to /dashboard — the exact same
-      // beforeLoad mechanism that already works on a hard refresh. The explicit
-      // navigate is a belt-and-suspenders fallback.
-      await router.invalidate();
-      await navigate({ to: "/dashboard" });
+      // Full navigation to the dashboard. Firebase persists the session, so this
+      // fresh load restores it and the _authenticated guard admits us — the
+      // exact path a manual hard reload takes (which works reliably), unlike the
+      // in-app router transition which wasn't re-rendering after sign-in.
+      window.location.replace("/dashboard");
     } catch (err) {
       // Never leak whether the email exists — one generic message for every
       // Firebase auth failure. Zod validation errors show their own message.
       const msg = err instanceof z.ZodError ? err.errors[0].message : "Invalid credentials.";
       toast.error(msg);
-    } finally {
       setLoading(false);
     }
   };
