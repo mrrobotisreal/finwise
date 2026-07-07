@@ -61,8 +61,8 @@ function AuthPage() {
         </Link>
         <div className="glass-card rounded-2xl p-8 shadow-[var(--shadow-card)]">
           <div className="mb-6 flex flex-col justify-center align-center items-center gap-2">
-            <img src="/FinWise.webp" alt="FinWise" className="h-16 w-16 rounded-lg object-cover mx-auto" />
-            <span className="font-title text-xl font-bold tracking-wide">FinWise</span>
+            <img src="/FinWise.webp" alt="FinWise" className="h-32 w-32 rounded-lg object-cover mx-auto" />
+            <span className="font-title text-6xl font-bold tracking-wide text-center">FinWise</span>
           </div>
           <h1 className="text-2xl font-bold">Welcome back</h1>
           <p className="mt-1 text-sm text-muted-foreground">Sign in to your workspace.</p>
