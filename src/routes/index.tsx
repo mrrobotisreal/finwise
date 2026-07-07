@@ -10,7 +10,7 @@ function Landing() {
     <div className="min-h-screen">
       <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
         <div className="flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary text-primary-foreground font-display font-bold">F</div>
+          <img src="/FinWise.webp" alt="FinWise" className="h-9 w-9 rounded-lg object-cover" />
           <span className="font-display text-xl font-semibold">FinWise</span>
         </div>
         <nav className="flex items-center gap-3">
@@ -22,6 +22,11 @@ function Landing() {
 
       <main className="mx-auto max-w-7xl px-6 pt-16 pb-24">
         <section className="mx-auto max-w-3xl text-center">
+          <img
+            src="/FinWise.webp"
+            alt="FinWise"
+            className="mx-auto mb-8 h-28 w-28 rounded-2xl object-cover shadow-[var(--shadow-glow)] md:h-32 md:w-32"
+          />
           <div className="mx-auto mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-secondary/60 px-3 py-1 text-xs text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-primary" />
             Your private financial workspace

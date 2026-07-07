@@ -18,7 +18,7 @@ export function AppHeader({ email }: { email?: string | null }) {
     <header className="sticky top-0 z-30 border-b border-border/60 bg-background/70 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
         <Link to="/dashboard" className="flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary text-primary-foreground font-display font-bold">F</div>
+          <img src="/FinWise.webp" alt="FinWise" className="h-9 w-9 rounded-lg object-cover" />
           <span className="font-display text-lg font-semibold">FinWise</span>
         </Link>
         <div className="flex items-center gap-3">

@@ -39,7 +39,9 @@ function AuthPage() {
       const parsed = credentialsSchema.parse({ email, password });
       await signInWithEmailAndPassword(auth, parsed.email, parsed.password);
       toast.success("Welcome back.");
-      navigate({ to: "/dashboard" });
+      // Navigation is driven by the onAuthStateChanged effect below once the
+      // auth state actually settles — navigating here would race Firebase's
+      // state propagation and can land beforeLoad on a not-yet-populated user.
     } catch (err) {
       // Never leak whether the email exists — one generic message for every
       // Firebase auth failure. Zod validation errors show their own message.
@@ -59,7 +61,7 @@ function AuthPage() {
         </Link>
         <div className="glass-card rounded-2xl p-8 shadow-[var(--shadow-card)]">
           <div className="mb-6 flex items-center gap-2">
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary text-primary-foreground font-display font-bold">F</div>
+            <img src="/FinWise.webp" alt="FinWise" className="h-9 w-9 rounded-lg object-cover" />
             <span className="font-display text-xl font-semibold">FinWise</span>
           </div>
           <h1 className="text-2xl font-bold">Welcome back</h1>

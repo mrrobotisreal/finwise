@@ -114,10 +114,18 @@ function RootComponent() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      router.invalidate();
       if (user) {
+        // Sign-in: refresh cached data + bootstrap the backend user row. Do NOT
+        // call router.invalidate() here — it would re-resolve the current
+        // location and cancel the navigation to /dashboard that the auth page
+        // fires on this same state change, leaving the user stuck on /auth.
         queryClient.invalidateQueries();
         void bootstrapUser(user.uid);
+      } else {
+        // Sign-out: clear cached data and re-run route guards so any protected
+        // route redirects back to /auth.
+        queryClient.clear();
+        router.invalidate();
       }
     });
     return () => unsubscribe();
